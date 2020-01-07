@@ -30,6 +30,8 @@ The grpc-dotnet gRPC client is built on HttpClient, a full-featured, multi-purpo
 
 * Add `Grpc.AspNetCore.Web`, a new package that acts as a in-process proxy for gRPC-Web. This package provides middleware via `UseGrpcWeb()` that detects gRPC-Web requests by their content-type, and translates them to gRPC HTTP/2. Request headers and the request message(s) are translated inbound, and response headers/footers and response message(s) are translated back to gRPC-Web outbound. Base64 content is encoded and decoded as content is read. There is configuration to control which services support gRPC-Web. A developer can choose to enable gRPC-Web for all services in `AddGrpcWeb`, or opt-in and opt-out on individual services.
 
+*Startup.cs* configuration file:
+
 ```csharp
 public void ConfigureServices(IServiceCollection services)
 {

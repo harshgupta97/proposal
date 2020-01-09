@@ -1,10 +1,10 @@
 gRPC-Web in-process proxy and client for grpc-dotnet
 ----
 * Author(s): James Newton-King
-* Approver: TBD
+* Approver: Jan Tattermusch & Wenbo Zhu
 * Status: In review
 * Implemented in: https://github.com/grpc/grpc-dotnet/pull/695
-* Last updated: 2020-01-08
+* Last updated: 2020-01-10
 * Discussion at: TBD
 
 ## Abstract
@@ -71,6 +71,8 @@ var client = new Greeter.GreeterClient(channel);
 ### Interoperability
 
 It is critical that any new gRPC-Web client and server implementations are compatible with existing gRPC-Web implementations. The grpc-dotnet interop test server and test client has been updated with the tests from https://github.com/johanbrandhorst/grpc-web-compatibility-test. The gRPC-Web client and server functionality appears to run correctly with other gRPC-Web implementations.
+
+There is no official suite of interop tests for gRPC-Web today. When interop tests are available then the .NET implementation will be updated to support them.
 
 ## Implementation
 All the relevant details are described in the proposal section above.

@@ -74,5 +74,9 @@ It is critical that any new gRPC-Web client and server implementations are compa
 
 There is no official suite of interop tests for gRPC-Web today. When interop tests are available then the .NET implementation will be updated to support them.
 
+## Release
+
+gRPC-Web for .NET will be initially released as a public preview. This gives time to ensure the new gRPC-Web implementation is compatible with other implementations, find bugs and technical issues, and get feedback that this solution is meeting developer needs.
+
 ## Implementation
 All the relevant details are described in the proposal section above.

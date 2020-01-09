@@ -65,7 +65,7 @@ var channel = GrpcChannel.ForAddress("https://localhost:5001", new GrpcChannelOp
     {
         HttpClient = new HttpClient(grpcWebHandler)
     });
-var client = Greeter.GreeterClient(channel);
+var client = new Greeter.GreeterClient(channel);
 ```
 
 ### Interoperability

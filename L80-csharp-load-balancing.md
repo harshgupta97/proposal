@@ -55,7 +55,11 @@ Console.WriteLine(response.Message);
 
 * No network activity until `GrpcChannel.ConnectAsync` is called, or the first RPC is started.
 * On connect, the `ConnectionManager` starts the resolver and prompts it to run immediately.
-* Resolver will push addresses to `ConnectionManager`, which will then call balancer.
+* Resolver pushes addresses and optional service config to `ConnectionManager`.
+* Load balancer is created.
+  * Resolver can return a service config. If `DisableServiceConfig` is not `true` then the resolver's service config is used to get load balancer policy.
+  * Channel service config option is used as a fallback.
+  * When no load balancer policy has been specified then a `PickFirstLoadBalancer` is created.
 * Balancer uses `IChannelController` to create, remove or update sub-channels as needed based on the addresses.
   * A new sub-channel starts connecting when `SubChannel.RequestConnection()` is called. Sub-channels shut down when disposed.
 * Balancer is notified of changes in sub-channel state. It will create a `SubChannelPicker` based on the current state.
@@ -64,6 +68,16 @@ Console.WriteLine(response.Message);
 
 * `ConnectionManager.PickAsync` is called to get a ready sub-channel along with the sub-channel's connected address.
 * If a picker hasn't been set yet, or the picker is empty, or the picker has an error then `PickAsync` will wait for a picker with a ready sub-channel if `WaitForReady` has been set. If `WaitForReady` is not set, then the error will be thrown back to the caller.
+
+### Connectivity
+
+* Channel supports standard connectivity APIs and follows closely what `Grpc.Core` does:
+  * `State` property to get `ConnectivityState`
+  * `ConnectAsync()` to explicitly move to a ready state
+  * `WaitForStateChangeAsync`
+* Limitation of connectivity support are imposed by missing .NET APIs:
+  * On .NET 5 and later only transport connectivity (i.e. can we create a TCP socket to the address) is taken into account. Missing support for validating the TLS handshake and HTTP/2 connection negotiation.
+  * Older versions of .NET Core don't have transport connectivity. Have to fallback to inferring connectivity by observing whether gRPC calls fail because of socket or IO related errors.
 
 ## Rationale
 
@@ -79,6 +93,10 @@ Implementation is in the grpc-dotnet repo: [PR #1286](https://github.com/grpc/gr
 
 ```csharp
 namespace Grpc.Net.Client {
+    public sealed class GrpcChannelOptions {
+        public bool DisableResolverServiceConfig { get; set; }
+        public IServiceProvider? ServiceProvider { get; set; }
+    }
     public sealed class GrpcChannel : ChannelBase, IDisposable {
         public Task ConnectAsync(CancellationToken cancellationToken = default);
         public ConnectivityState State { get; }
@@ -95,14 +113,15 @@ namespace Grpc.Net.Client {
     
 namespace Grpc.Net.Client.Balancer {
     public sealed class ResolverOptions {
-        public ResolverOptions();
+        public ResolverOptions(bool disableServiceConfig);
+        public bool DisableServiceConfig { get; }
     }
-    public class SubChannelOptions {
-        public SubChannelOptions(IReadOnlyList<DnsEndPoint> addresses);
+    public class SubchannelOptions {
+        public SubchannelOptions(IReadOnlyList<DnsEndPoint> addresses);
         public IReadOnlyList<DnsEndPoint> Addresses { get; }
     }
     public interface IConnectionController {
-        SubChannel CreateSubChannel(SubChannelOptions options);
+        Subchannel CreateSubchannel(SubchannelOptions options);
         void RefreshResolver();
         void UpdateState(BalancerState state);
     }
@@ -135,14 +154,16 @@ namespace Grpc.Net.Client.Balancer {
         public string Key { get; }
     }
     public class BalancerState {
-        public BalancerState(ConnectivityState connectivityState, SubChannelPicker picker);
+        public BalancerState(ConnectivityState connectivityState, SubchannelPicker picker);
         public ConnectivityState ConnectivityState { get; }
-        public SubChannelPicker Picker { get; }
+        public SubchannelPicker Picker { get; }
     }
     public class ChannelState {
-        public ChannelState(ResolverResult resolverState, BalancerAttributes options);
-        public BalancerAttributes Options { get; set; }
-        public ResolverResult ResolverState { get; set; }
+        public ChannelState(Status status, IReadOnlyList<DnsEndPoint>? addresses, LoadBalancingConfig? loadBalancingConfig, BalancerAttributes attributes);
+        public IReadOnlyList<DnsEndPoint>? Addresses { get; }
+        public BalancerAttributes Attributes { get; }
+        public LoadBalancingConfig? LoadBalancingConfig { get; }
+        public Status Status { get; }
     }
     public class CompleteContext {
         public CompleteContext();
@@ -165,7 +186,7 @@ namespace Grpc.Net.Client.Balancer {
         public void Dispose();
         public abstract void RequestConnection();
         public abstract void UpdateChannelState(ChannelState state);
-        public abstract void UpdateSubChannelState(SubChannel subChannel, SubChannelState state);
+        public abstract void UpdateSubchannelState(Subchannel subchannel, SubchannelState state);
         protected virtual void Dispose(bool disposing);
     }
     public abstract class LoadBalancerFactory {
@@ -181,7 +202,7 @@ namespace Grpc.Net.Client.Balancer {
         public PickFirstBalancer(IConnectionController channel, ILoggerFactory loggerFactory);
         public override void RequestConnection();
         public override void UpdateChannelState(ChannelState state);
-        public override void UpdateSubChannelState(SubChannel subChannel, SubChannelState state);
+        public override void UpdateSubchannelState(Subchannel subchannel, SubchannelState state);
         protected override void Dispose(bool disposing);
     }
     public class PickFirstBalancerFactory : LoadBalancerFactory {
@@ -190,8 +211,11 @@ namespace Grpc.Net.Client.Balancer {
         public override LoadBalancer Create(IConnectionController controller, IDictionary<string, object> options);
     }
     public class PickResult {
-        public PickResult(SubChannel? subChannel, Action<CompleteContext>? onComplete);
-        public SubChannel? SubChannel { get; }
+        public Status Status { get; }
+        public Subchannel? Subchannel { get; }
+        public static PickResult ForError(Status status);
+        public static PickResult ForNoResult();
+        public static PickResult ForSubchannel(Subchannel subchannel, Action<CompleteContext>? onComplete = null);
         public void Complete(CompleteContext context);
     }
     public abstract class Resolver : IDisposable {
@@ -207,15 +231,16 @@ namespace Grpc.Net.Client.Balancer {
         public abstract Resolver Create(Uri address, ResolverOptions options);
     }
     public class ResolverResult {
-        public ResolverResult(IReadOnlyList<DnsEndPoint> addresses);
-        public ResolverResult(Exception exception);
         public IReadOnlyList<DnsEndPoint>? Addresses { get; }
         public BalancerAttributes Attributes { get; }
-        public Exception? Exception { get; }
+        public ServiceConfig? ServiceConfig { get; }
+        public Status? Status { get; }
+        public static ResolverResult ForError(Status status);
+        public static ResolverResult ForResult(IReadOnlyList<DnsEndPoint> addresses, ServiceConfig? serviceConfig);
     }
-    public class RoundRobinBalancer : SubChannelsLoadBalancer {
+    public class RoundRobinBalancer : SubchannelsLoadBalancer {
         public RoundRobinBalancer(IConnectionController channel, ILoggerFactory loggerFactory);
-        protected override SubChannelPicker CreatePicker(List<SubChannel> readySubChannels);
+        protected override SubchannelPicker CreatePicker(List<Subchannel> readySubchannels);
     }
     public class RoundRobinBalancerFactory : LoadBalancerFactory {
         public RoundRobinBalancerFactory(ILoggerFactory loggerFactory);
@@ -233,7 +258,7 @@ namespace Grpc.Net.Client.Balancer {
         public override string Name { get; }
         public override Resolver Create(Uri address, ResolverOptions options);
     }
-    public class SubChannel : IDisposable {
+    public class Subchannel : IDisposable {
         public BalancerAttributes Attributes { get; }
         public DnsEndPoint? CurrentEndPoint { get; }
         public ConnectivityState State { get; }
@@ -243,24 +268,24 @@ namespace Grpc.Net.Client.Balancer {
         public void UpdateAddresses(IReadOnlyList<DnsEndPoint> addresses);
         public override string ToString();
     }
-    public abstract class SubChannelPicker {
-        protected SubChannelPicker();
+    public abstract class SubchannelPicker {
+        protected SubchannelPicker();
         public abstract PickResult Pick(PickContext context);
     }
-    public abstract class SubChannelsLoadBalancer : LoadBalancer {
-        protected SubChannelsLoadBalancer(IConnectionController controller, ILoggerFactory loggerFactory);
+    public abstract class SubchannelsLoadBalancer : LoadBalancer {
+        protected SubchannelsLoadBalancer(IConnectionController controller, ILoggerFactory loggerFactory);
         protected IConnectionController Controller { get; }
         protected ConnectivityState State { get; }
         public override void RequestConnection();
         public override void UpdateChannelState(ChannelState state);
-        public override void UpdateSubChannelState(SubChannel subChannel, SubChannelState state);
-        protected abstract SubChannelPicker CreatePicker(List<SubChannel> readySubChannels);
+        public override void UpdateSubchannelState(Subchannel subchannel, SubchannelState state);
+        protected abstract SubchannelPicker CreatePicker(List<Subchannel> readySubchannels);
         protected override void Dispose(bool disposing);
     }
-    public class SubChannelState {
-        public SubChannelState(ConnectivityState connectivityState, Exception? connectionError = null);
-        public Exception? ConnectionError { get; }
-        public ConnectivityState ConnectivityState { get; }
+    public class SubchannelState {
+        public SubchannelState(ConnectivityState state, Status status);
+        public ConnectivityState State { get; }
+        public Status Status { get; }
     }
 }
 ```

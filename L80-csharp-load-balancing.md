@@ -1,4 +1,4 @@
-L80: Load balancing, connectivity and wait for ready in grpc-dotnet client
+L80: .NET: Load balancing, connectivity and wait for ready in client
 ----
 * Author(s): James Newton-King
 * Approver: jtattermusch and markdroth

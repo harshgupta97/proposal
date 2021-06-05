@@ -1,4 +1,4 @@
-Title
+L80: Load balancing, connectivity and wait for ready in grpc-dotnet client
 ----
 * Author(s): James Newton-King
 * Approver: jtattermusch and markdroth
@@ -84,6 +84,19 @@ var client = new Greet.GreeterClient(channel);
 * Balancer is notified of changes in subchannel state by subscribing to `Subchannel.StateChanged` event. The balancer will create a `SubchannelPicker` based on the current state.
 
 ### Picking
+
+Wait for ready sample:
+
+```csharp
+var channel = CreateChannel();
+var client = new Greet.GreeterClient(channel);
+
+var reply = await client.SayHelloAsync(
+    new HelloRequest { Name = "world" },
+    new CallOptions(waitForReady: true));
+
+Console.WriteLine(reply.Message);
+```
 
 * `ConnectionManager.PickAsync` is called to get a ready subchannel along with the subchannel's connected address.
 * A picker returns a result of one of four types:

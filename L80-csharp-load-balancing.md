@@ -144,6 +144,8 @@ Console.WriteLine(channel.State); // Shutdown
 
 Implementation is in the grpc-dotnet repo: [PR #1286](https://github.com/grpc/grpc-dotnet/pull/1286).
 
+Note: `GrpcChannelOptions` and `GrpcChannel` are existing types. Only new APIs are shown for them.
+
 ```csharp
 namespace Grpc.Net.Client {
     public sealed class GrpcChannelOptions {
@@ -166,10 +168,9 @@ namespace Grpc.Net.Client {
     
 namespace Grpc.Net.Client.Balancer {
     public sealed class ResolverOptions {
-        public ResolverOptions(bool disableServiceConfig);
         public bool DisableServiceConfig { get; }
     }
-    public class SubchannelOptions {
+    public sealed class SubchannelOptions {
         public SubchannelOptions(IReadOnlyList<DnsEndPoint> addresses);
         public IReadOnlyList<DnsEndPoint> Addresses { get; }
     }
@@ -206,22 +207,21 @@ namespace Grpc.Net.Client.Balancer {
         public BalancerAttributesKey(string key);
         public string Key { get; }
     }
-    public class BalancerState {
+    public sealed class BalancerState {
         public BalancerState(ConnectivityState connectivityState, SubchannelPicker picker);
         public ConnectivityState ConnectivityState { get; }
         public SubchannelPicker Picker { get; }
     }
-    public class ChannelState {
-        public ChannelState(Status status, IReadOnlyList<DnsEndPoint>? addresses, LoadBalancingConfig? loadBalancingConfig, BalancerAttributes attributes);
+    public sealed class ChannelState {
         public IReadOnlyList<DnsEndPoint>? Addresses { get; }
         public BalancerAttributes Attributes { get; }
         public LoadBalancingConfig? LoadBalancingConfig { get; }
         public Status Status { get; }
     }
-    public class CompleteContext {
-        public CompleteContext();
+    public sealed class CompletionContext {
+        public CompletionContext();
+        public DnsEndPoint? Address { get; set; }
         public Exception? Error { get; set; }
-        public Metadata? Trailers { get; set; }
     }
     public sealed class DnsResolver : Resolver {
         public DnsResolver(Uri address, ILoggerFactory loggerFactory, TimeSpan refreshInterval);
@@ -229,7 +229,7 @@ namespace Grpc.Net.Client.Balancer {
         public override void Start(Action<ResolverResult> listener);
         protected override void Dispose(bool disposing);
     }
-    public class DnsResolverFactory : ResolverFactory {
+    public sealed class DnsResolverFactory : ResolverFactory {
         public DnsResolverFactory(ILoggerFactory loggerFactory, TimeSpan refreshInterval);
         public override string Name { get; }
         public override Resolver Create(Uri address, ResolverOptions options);
@@ -246,30 +246,30 @@ namespace Grpc.Net.Client.Balancer {
         public abstract string Name { get; }
         public abstract LoadBalancer Create(IChannelControlHelper controller, IDictionary<string, object> options);
     }
-    public class PickContext {
+    public sealed class PickContext {
         public PickContext();
         public HttpRequestMessage? Request { get; set; }
     }
-    public class PickFirstBalancer : LoadBalancer {
+    public sealed class PickFirstBalancer : LoadBalancer {
         public PickFirstBalancer(IChannelControlHelper controller, ILoggerFactory loggerFactory);
         public override void RequestConnection();
         public override void UpdateChannelState(ChannelState state);
         protected override void Dispose(bool disposing);
     }
-    public class PickFirstBalancerFactory : LoadBalancerFactory {
+    public sealed class PickFirstBalancerFactory : LoadBalancerFactory {
         public PickFirstBalancerFactory(ILoggerFactory loggerFactory);
         public override string Name { get; }
         public override LoadBalancer Create(IChannelControlHelper controller, IDictionary<string, object> options);
     }
-    public class PickResult {
+    public sealed class PickResult {
         public Status Status { get; }
         public Subchannel? Subchannel { get; }
         public PickResultType Type { get; }
-        public static PickResult ForComplete(Subchannel subchannel, Action<CompleteContext>? onComplete = null);
         public static PickResult ForDrop(Status status);
-        public static PickResult ForFail(Status status);
+        public static PickResult ForFailure(Status status);
         public static PickResult ForQueue();
-        public void Complete(CompleteContext context);
+        public static PickResult ForSubchannel(Subchannel subchannel, Action<CompletionContext>? onComplete = null);
+        public void Complete(CompletionContext context);
     }
     public abstract class Resolver : IDisposable {
         protected Resolver();
@@ -283,40 +283,40 @@ namespace Grpc.Net.Client.Balancer {
         public abstract string Name { get; }
         public abstract Resolver Create(Uri address, ResolverOptions options);
     }
-    public class ResolverResult {
+    public sealed class ResolverResult {
         public IReadOnlyList<DnsEndPoint>? Addresses { get; }
         public BalancerAttributes Attributes { get; }
         public ServiceConfig? ServiceConfig { get; }
         public Status? Status { get; }
-        public static ResolverResult ForError(Status status);
+        public static ResolverResult ForFailure(Status status);
         public static ResolverResult ForResult(IReadOnlyList<DnsEndPoint> addresses, ServiceConfig? serviceConfig);
     }
-    public class RoundRobinBalancer : SubchannelsLoadBalancer {
+    public sealed class RoundRobinBalancer : SubchannelsLoadBalancer {
         public RoundRobinBalancer(IChannelControlHelper controller, ILoggerFactory loggerFactory);
-        protected override SubchannelPicker CreatePicker(List<Subchannel> readySubchannels);
+        protected override SubchannelPicker CreatePicker(IReadOnlyList<Subchannel> readySubchannels);
     }
-    public class RoundRobinBalancerFactory : LoadBalancerFactory {
+    public sealed class RoundRobinBalancerFactory : LoadBalancerFactory {
         public RoundRobinBalancerFactory(ILoggerFactory loggerFactory);
         public override string Name { get; }
         public override LoadBalancer Create(IChannelControlHelper controller, IDictionary<string, object> options);
     }
-    public class StaticResolver : Resolver {
+    public sealed class StaticResolver : Resolver {
         public StaticResolver(IEnumerable<DnsEndPoint> addresses);
         public override Task RefreshAsync(CancellationToken cancellationToken);
         public override void Start(Action<ResolverResult> listener);
         protected override void Dispose(bool disposing);
     }
-    public class StaticResolverFactory : ResolverFactory {
-        public StaticResolverFactory(IEnumerable<DnsEndPoint> addresses);
+    public sealed class StaticResolverFactory : ResolverFactory {
+        public StaticResolverFactory(Func<Uri, IEnumerable<DnsEndPoint>> addressesCallback);
         public override string Name { get; }
         public override Resolver Create(Uri address, ResolverOptions options);
     }
-    public class Subchannel : IDisposable {
+    public sealed class Subchannel : IDisposable {
         public BalancerAttributes Attributes { get; }
-        public DnsEndPoint? CurrentEndPoint { get; }
+        public DnsEndPoint? CurrentAddress { get; }
         public ConnectivityState State { get; }
         public void Dispose();
-        public IList<DnsEndPoint> GetAddresses();
+        public IReadOnlyList<DnsEndPoint> GetAddresses();
         public void RequestConnection();
         public event EventHandler<SubchannelState> StateChanged;
         public void UpdateAddresses(IReadOnlyList<DnsEndPoint> addresses);
@@ -332,11 +332,10 @@ namespace Grpc.Net.Client.Balancer {
         protected ConnectivityState State { get; }
         public override void RequestConnection();
         public override void UpdateChannelState(ChannelState state);
-        protected abstract SubchannelPicker CreatePicker(List<Subchannel> readySubchannels);
+        protected abstract SubchannelPicker CreatePicker(IReadOnlyList<Subchannel> readySubchannels);
         protected override void Dispose(bool disposing);
     }
-    public class SubchannelState {
-        public SubchannelState(ConnectivityState state, Status status);
+    public sealed class SubchannelState {
         public ConnectivityState State { get; }
         public Status Status { get; }
     }

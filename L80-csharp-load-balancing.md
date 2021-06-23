@@ -63,6 +63,27 @@ var channel = GrpcChannel.ForAddress(
 var client = new Greet.GreeterClient(channel);
 ```
 
+With client service provider:
+
+```csharp
+var factory = new StaticResolverFactory(addr => new[]
+{
+    new DnsEndPoint("localhost", 80),
+    new DnsEndPoint("localhost", 81)
+});
+var services = new ServiceCollection();
+services.AddSingleton<ResolverFactory>(factory);
+
+var channel = GrpcChannel.ForAddress(
+    "static:///my-example-host",
+    new GrpcChannelOptions
+    {
+        ChannelCredentials = ChannelCredentials.Insecure,
+        ServiceProvider = services.BuildServiceProvider()
+    });
+var client = new Greet.GreeterClient(channel);
+```
+
 * Resolver is created from address scheme.
   * Existing logic allows for `http` and `https`. These schemes are special-cased to never use a resolver.
   * A collection of resolver factories are fetched from the service provider. One is selected using the address scheme, and it will create a resolver. For example, `dns` will match to `DnsResolverFactory`, creating a `DnsResolver`.

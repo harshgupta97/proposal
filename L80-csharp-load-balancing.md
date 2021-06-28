@@ -165,9 +165,21 @@ Console.WriteLine(channel.State); // Shutdown
 
 Implementation is in the grpc-dotnet repo: [PR #1286](https://github.com/grpc/grpc-dotnet/pull/1286).
 
-Note: `GrpcChannelOptions` and `GrpcChannel` are existing types. Only new APIs are shown for them.
+Notes:
+* `ConnectivityState` is added to `Grpc.Net.Common` package. All other changes are in `Grpc.Net.Client`.
+* `GrpcChannelOptions` and `GrpcChannel` are existing types. Only new APIs are shown for them.
 
 ```csharp
+namespace Grpc.Core {
+    public enum ConnectivityState {
+        Idle = 0,
+        Connecting = 1,
+        Ready = 2,
+        TransientFailure = 3,
+        Shutdown = 4,
+    }
+}
+
 namespace Grpc.Net.Client {
     public sealed class GrpcChannelOptions {
         public bool DisableResolverServiceConfig { get; set; }

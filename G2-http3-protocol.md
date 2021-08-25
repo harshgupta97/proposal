@@ -43,7 +43,19 @@ to directly, without any duplication.
 
 Notably, unlike gRPC-Web, the content-type of `application/grpc` is unchanged.
 
-### Errors
+### Transport mapping
+
+The gRPC over HTTP/2 specification [discusses HTTP2 transport mapping](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#http2-transport-mapping). The content discussed is mostly applicable to HTTP/3.
+
+#### Stream Identification
+
+HTTP/3 stream IDs function largely the same as HTTP/2 stream IDs.
+
+#### Data frames
+
+The relationship between `DATA` frames and length prefixed messages are unchanged in HTTP/3.
+
+#### Errors
 
 HTTP/3 [has different error codes](https://quicwg.org/base-drafts/draft-ietf-quic-http.html#section-8.1) from HTTP/2. HTTP/3 errors are sent via QUIC frames instead of an `RST_STREAM` HTTP frame.
 
@@ -77,6 +89,12 @@ n/a|STREAM_CLOSED|No mapping as there is no open stream to propagate to. Impleme
 n/a|COMPRESSION_ERROR|INTERNAL
 n/a|INADEQUATE_SECURITY| PERMISSION_DENIED … with additional detail indicating that permission was denied as protocol is not secure enough for call.
 
+#### Connection management
+
+`GOAWAY` and `PING` frames exist in HTTP/3 and serve the same purpose as in HTTP/2.
+One notable difference is the `GOAWAY` frame in HTTP/2 can have the last
+successfully processed stream ID. In HTTP/3 the `GOAWAY` frame ID value must be greater.
+
 ### Exceeding deadlines
 
 When an RPC has exceeded its deadline in HTTP/2, the server will complete the response
@@ -84,9 +102,9 @@ with a gRPC status code of DEADLINE_EXCEEDED, then send a `RST_STREAM` frame to 
 client to stop it from continuing to send the request stream. The HTTP/2 response is
 then processed by the gRPC client and will report the DEADLINE_EXCEEDED failure to the app.
 
-In HTTP/3, there isn't a `RST_STREAM` frame in the HTTP/3 specification. Reading and
-sending parts of a QUIC stream can be independently be stopped and the `RST_STREAM`
-functionality has been replaced by two QUIC frames:
+The `RST_STREAM` frame doesn't exist in HTTP/3. The reading and sending parts of a QUIC
+stream can be independently be stopped and the `RST_STREAM` functionality has been
+replaced by two QUIC frames:
 
 * [RESET_STREAM](https://www.rfc-editor.org/rfc/rfc9000.html#name-reset_stream-frames) - Abruptly terminate the sending part of a stream.
 * [STOP_SENDING](https://www.rfc-editor.org/rfc/rfc9000.html#name-stop_sending-frames) - Requests that a peer cease transmission on a stream.

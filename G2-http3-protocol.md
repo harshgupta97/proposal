@@ -59,7 +59,7 @@ The relationship between `DATA` frames and length prefixed messages are unchange
 
 HTTP/3 [has different error codes](https://quicwg.org/base-drafts/draft-ietf-quic-http.html#section-8.1) from HTTP/2. HTTP/3 errors are sent via QUIC frames instead of an `RST_STREAM` HTTP frame.
 
-There are three situations where HTTP/3 errors are used:
+HTTP/3 errors are used in three situations:
 
 * Abruptly terminating streams
 * Aborting reading of streams
@@ -92,26 +92,26 @@ n/a|INADEQUATE_SECURITY| PERMISSION_DENIED … with additional detail indicating
 #### Connection management
 
 `GOAWAY` and `PING` frames exist in HTTP/3 and serve the same purpose as in HTTP/2.
-One notable difference is the `GOAWAY` frame in HTTP/2 can have the last
-successfully processed stream ID. In HTTP/3 the `GOAWAY` frame ID value must be greater.
+One notable difference is the `GOAWAY` frame in HTTP/2 reports the last
+successfully processed stream ID. In HTTP/3 the `GOAWAY` frame ID value must be greater
+that the last successfully processed stream ID.
 
 ### Exceeding deadlines
 
 When an RPC has exceeded its deadline in HTTP/2, the server will complete the response
 with a gRPC status code of DEADLINE_EXCEEDED, then send a `RST_STREAM` frame to the
-client to stop it from continuing to send the request stream. The HTTP/2 response is
-then processed by the gRPC client and will report the DEADLINE_EXCEEDED failure to the app.
+client to stop it from continuing to send the request stream. The client gets the
+response and reports the DEADLINE_EXCEEDED failure to the app.
 
-The `RST_STREAM` frame doesn't exist in HTTP/3. The reading and sending parts of a QUIC
-stream can be independently be stopped and the `RST_STREAM` functionality has been
-replaced by two QUIC frames:
+The `RST_STREAM` frame doesn't exist in HTTP/3. QUIC supports stopping the reading and sending parts of a QUIC
+stream independently. Two QUIC frames have replaced `RST_STREAM` functionality:
 
 * [RESET_STREAM](https://www.rfc-editor.org/rfc/rfc9000.html#name-reset_stream-frames) - Abruptly terminate the sending part of a stream.
 * [STOP_SENDING](https://www.rfc-editor.org/rfc/rfc9000.html#name-stop_sending-frames) - Requests that a peer cease transmission on a stream.
 
 `RESET_STREAM` is not appropriate because the response with the DEADLINE_EXCEEDED status
-code should reach the client. Because QUIC frames can be received out-of-order, even
-sending this QUIC frame after the response has been completed can cause the client
+code should reach the client. Because QUIC frames can be received out-of-order,
+sending this QUIC frame after completing the response can cause the client
 to abort the request.
 
 `STOP_SENDING` should be sent to the client by a gRPC server after it completes the response.
